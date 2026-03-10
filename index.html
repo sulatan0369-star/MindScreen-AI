@@ -1,0 +1,1117 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MindScreen AI - คัดกรองความเสี่ยงสุขภาพจิต</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        'display': ['Prompt', 'sans-serif'],
+                        'body': ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        :root {
+            --bg-primary: #0a0f1a;
+            --bg-secondary: #111827;
+            --bg-card: #1a2235;
+            --text-primary: #f1f5f9;
+            --text-muted: #94a3b8;
+            --accent-teal: #14b8a6;
+            --accent-amber: #f59e0b;
+            --accent-rose: #f43f5e;
+            --border-color: #2d3a4f;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .font-display { font-family: 'Prompt', sans-serif; }
+
+        .bg-mesh {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        .mesh-gradient {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(100px);
+            opacity: 0.15;
+            animation: float 20s ease-in-out infinite;
+        }
+
+        .mesh-1 {
+            width: 600px; height: 600px;
+            background: linear-gradient(135deg, #14b8a6, #0d9488);
+            top: -200px; right: -100px;
+            animation-delay: 0s;
+        }
+
+        .mesh-2 {
+            width: 500px; height: 500px;
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            bottom: -150px; left: -100px;
+            animation-delay: -7s;
+        }
+
+        .mesh-3 {
+            width: 400px; height: 400px;
+            background: linear-gradient(135deg, #6366f1, #4f46e5);
+            top: 50%; left: 30%;
+            animation-delay: -14s;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            33% { transform: translate(30px, -30px) scale(1.05); }
+            66% { transform: translate(-20px, 20px) scale(0.95); }
+        }
+
+        .glass-card {
+            background: rgba(26, 34, 53, 0.8);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+        }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: var(--bg-secondary); }
+        ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
+
+        .progress-fill { transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1); }
+
+        .risk-low { color: #14b8a6; }
+        .risk-moderate { color: #f59e0b; }
+        .risk-high { color: #f43f5e; }
+
+        .risk-bg-low { background: rgba(20, 184, 166, 0.15); border-color: rgba(20, 184, 166, 0.3); }
+        .risk-bg-moderate { background: rgba(245, 158, 11, 0.15); border-color: rgba(245, 158, 11, 0.3); }
+        .risk-bg-high { background: rgba(244, 63, 94, 0.15); border-color: rgba(244, 63, 94, 0.3); }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #14b8a6, #0d9488);
+            color: white;
+            padding: 12px 28px;
+            border-radius: 12px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(20, 184, 166, 0.3);
+        }
+
+        .btn-primary:active { transform: translateY(0); }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+        .btn-secondary {
+            background: transparent;
+            color: var(--text-primary);
+            padding: 12px 28px;
+            border-radius: 12px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            border: 1px solid var(--border-color);
+            cursor: pointer;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: var(--accent-teal);
+        }
+
+        .option-card {
+            background: rgba(17, 24, 39, 0.6);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 16px 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .option-card:hover {
+            background: rgba(20, 184, 166, 0.05);
+            border-color: rgba(20, 184, 166, 0.3);
+        }
+
+        .option-card.selected {
+            background: rgba(20, 184, 166, 0.1);
+            border-color: var(--accent-teal);
+        }
+
+        .page {
+            display: none;
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 0.5s ease, transform 0.5s ease;
+        }
+
+        .page.active {
+            display: block;
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .stagger-item {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+
+        .stagger-item.visible { animation: fadeInUp 0.6s ease forwards; }
+
+        @keyframes fadeInUp {
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .pulse-ring { animation: pulse-ring 2s ease-out infinite; }
+
+        @keyframes pulse-ring {
+            0% { transform: scale(1); opacity: 1; }
+            100% { transform: scale(1.5); opacity: 0; }
+        }
+
+        .spinner {
+            width: 40px; height: 40px;
+            border: 3px solid var(--border-color);
+            border-top-color: var(--accent-teal);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .confidence-bar {
+            height: 8px;
+            background: var(--bg-secondary);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .confidence-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 1s ease;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+
+        .nav-link {
+            position: relative;
+            padding: 8px 16px;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .nav-link:hover { background: rgba(255, 255, 255, 0.05); }
+        .nav-link.active { background: rgba(20, 184, 166, 0.15); color: var(--accent-teal); }
+
+        .history-row { transition: background 0.3s ease; }
+        .history-row:hover { background: rgba(255, 255, 255, 0.02); }
+
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .modal-overlay.active { opacity: 1; visibility: visible; }
+
+        .modal-content { transform: scale(0.9); transition: transform 0.3s ease; }
+        .modal-overlay.active .modal-content { transform: scale(1); }
+
+        .typing-indicator { display: flex; gap: 4px; padding: 8px 12px; }
+
+        .typing-dot {
+            width: 8px; height: 8px;
+            background: var(--accent-teal);
+            border-radius: 50%;
+            animation: typingBounce 1.4s ease-in-out infinite;
+        }
+
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes typingBounce {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-8px); }
+        }
+    </style>
+</head>
+<body>
+    <!-- Animated Background -->
+    <div class="bg-mesh">
+        <div class="mesh-gradient mesh-1"></div>
+        <div class="mesh-gradient mesh-2"></div>
+        <div class="mesh-gradient mesh-3"></div>
+    </div>
+
+    <!-- Main Container -->
+    <div class="relative z-10 min-h-screen">
+        <!-- Navigation -->
+        <nav class="fixed top-0 left-0 right-0 z-50 glass-card mx-4 mt-4 lg:mx-8">
+            <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-500 to-teal-600 flex items-center justify-center">
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                        </svg>
+                    </div>
+                    <span class="font-display font-semibold text-lg">MindScreen AI</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button class="nav-link active" data-page="landing" id="nav-landing">หน้าแรก</button>
+                    <button class="nav-link" data-page="assessment" id="nav-assessment">ประเมิน</button>
+                    <button class="nav-link" data-page="history" id="nav-history">ประวัติ</button>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Page: Landing -->
+        <div id="page-landing" class="page active pt-28 pb-16 px-4">
+            <div class="max-w-4xl mx-auto">
+                <!-- Hero -->
+                <div class="text-center mb-16">
+                    <div class="stagger-item inline-block mb-6 px-4 py-2 rounded-full bg-teal-500/10 border border-teal-500/20">
+                        <span class="text-teal-400 text-sm font-medium">AI-Powered Mental Health Screening</span>
+                    </div>
+                    <h1 class="stagger-item font-display text-4xl md:text-5xl lg:text-6xl font-bold mb-6 leading-tight">
+                        คัดกรองความเสี่ยง<br>
+                        <span class="text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-cyan-400">สุขภาพจิต</span> ด้วย AI
+                    </h1>
+                    <p class="stagger-item text-lg text-slate-400 max-w-2xl mx-auto mb-8">
+                        ระบบประเมินความเสี่ยงทางสุขภาพจิตเบื้องต้น ที่ช่วยให้คุณเข้าใจสภาพจิตใจของตนเอง
+                        พร้อมคำแนะนำจาก AI ที่ปลอดภัยและมีการควบคุม
+                    </p>
+                    <div class="stagger-item flex flex-wrap justify-center gap-4">
+                        <button class="btn-primary text-lg" id="btn-start-assessment">เริ่มการประเมิน</button>
+                        <button class="btn-secondary text-lg" id="btn-view-history">ดูประวัติ</button>
+                    </div>
+                </div>
+
+                <!-- Features -->
+                <div class="grid md:grid-cols-3 gap-6 mb-16">
+                    <div class="stagger-item glass-card p-6">
+                        <div class="w-12 h-12 rounded-xl bg-teal-500/10 flex items-center justify-center mb-4">
+                            <svg class="w-6 h-6 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                            </svg>
+                        </div>
+                        <h3 class="font-display font-semibold text-lg mb-2">วิเคราะห์ด้วย AI</h3>
+                        <p class="text-slate-400 text-sm">ใช้โมเดล AI วิเคราะห์คำตอบของคุณอย่างเป็นระบบ พร้อมคำแนะนำเบื้องต้น</p>
+                    </div>
+                    <div class="stagger-item glass-card p-6">
+                        <div class="w-12 h-12 rounded-xl bg-amber-500/10 flex items-center justify-center mb-4">
+                            <svg class="w-6 h-6 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                            </svg>
+                        </div>
+                        <h3 class="font-display font-semibold text-lg mb-2">ปลอดภัยและเป็นส่วนตัว</h3>
+                        <p class="text-slate-400 text-sm">ข้อมูลของคุณถูกเก็บในระบบที่ปลอดภัย ไม่เปิดเผยต่อบุคคลที่สาม</p>
+                    </div>
+                    <div class="stagger-item glass-card p-6">
+                        <div class="w-12 h-12 rounded-xl bg-rose-500/10 flex items-center justify-center mb-4">
+                            <svg class="w-6 h-6 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                            </svg>
+                        </div>
+                        <h3 class="font-display font-semibold text-lg mb-2">มีมาตรการคุ้มกัน</h3>
+                        <p class="text-slate-400 text-sm">มี Guardrail ป้องกันข้อมูลผิดพลาด และ HITL ให้คุณยืนยันผลเสมอ</p>
+                    </div>
+                </div>
+
+                <!-- Warning Box -->
+                <div class="stagger-item glass-card p-6 border-l-4 border-amber-500">
+                    <div class="flex gap-4">
+                        <div class="flex-shrink-0">
+                            <svg class="w-6 h-6 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                            </svg>
+                        </div>
+                        <div>
+                            <h4 class="font-display font-semibold text-amber-400 mb-2">ข้อควรทราบ</h4>
+                            <p class="text-slate-400 text-sm">
+                                ระบบนี้เป็นเครื่องมือคัดกรองเบื้องต้นเท่านั้น <strong class="text-white">ไม่ใช่การวินิจฉัยทางการแพทย์</strong> 
+                                หากคุณมีความเสี่ยงสูงหรือมีอาการรุนแรง โปรดปรึกษาแพทย์หรือจิตแพทย์โดยเร็ว
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- KPI Dashboard -->
+                <div class="stagger-item mt-16">
+                    <h2 class="font-display text-2xl font-semibold mb-6 text-center">ตัวชี้วัดระบบ (KPI)</h2>
+                    <div class="grid md:grid-cols-4 gap-4">
+                        <div class="glass-card p-4 text-center">
+                            <div class="text-3xl font-bold text-teal-400" id="kpi-total">0</div>
+                            <div class="text-sm text-slate-400 mt-1">การประเมินทั้งหมด</div>
+                        </div>
+                        <div class="glass-card p-4 text-center">
+                            <div class="text-3xl font-bold text-green-400" id="kpi-low">0%</div>
+                            <div class="text-sm text-slate-400 mt-1">ความเสี่ยงต่ำ</div>
+                        </div>
+                        <div class="glass-card p-4 text-center">
+                            <div class="text-3xl font-bold text-amber-400" id="kpi-moderate">0%</div>
+                            <div class="text-sm text-slate-400 mt-1">ความเสี่ยงปานกลาง</div>
+                        </div>
+                        <div class="glass-card p-4 text-center">
+                            <div class="text-3xl font-bold text-rose-400" id="kpi-high">0%</div>
+                            <div class="text-sm text-slate-400 mt-1">ความเสี่ยงสูง</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Page: Assessment -->
+        <div id="page-assessment" class="page pt-28 pb-16 px-4">
+            <div class="max-w-2xl mx-auto">
+                <div class="glass-card p-4 mb-8">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-sm text-slate-400">ความคืบหน้า</span>
+                        <span class="text-sm font-medium"><span id="current-q">1</span> / <span id="total-q">9</span></span>
+                    </div>
+                    <div class="h-2 bg-slate-700 rounded-full overflow-hidden">
+                        <div class="progress-fill h-full bg-gradient-to-r from-teal-500 to-cyan-500 rounded-full" style="width: 0%" id="progress-bar"></div>
+                    </div>
+                </div>
+
+                <div class="glass-card p-6 md:p-8" id="question-container"></div>
+
+                <div class="flex justify-between mt-6">
+                    <button class="btn-secondary" id="btn-prev" disabled>ย้อนกลับ</button>
+                    <button class="btn-primary" id="btn-next">ข้อถัดไป</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Page: Result -->
+        <div id="page-result" class="page pt-28 pb-16 px-4">
+            <div class="max-w-2xl mx-auto">
+                <div class="glass-card p-6 md:p-8" id="result-container"></div>
+            </div>
+        </div>
+
+        <!-- Page: History -->
+        <div id="page-history" class="page pt-28 pb-16 px-4">
+            <div class="max-w-4xl mx-auto">
+                <h2 class="font-display text-2xl font-semibold mb-6">ประวัติการประเมิน</h2>
+                <div class="glass-card overflow-hidden" id="history-container"></div>
+            </div>
+        </div>
+
+        <!-- Emergency Button -->
+        <div class="fixed bottom-6 right-6 z-50">
+            <button class="relative" id="emergency-btn">
+                <span class="absolute inset-0 rounded-full bg-rose-500 pulse-ring"></span>
+                <span class="relative flex items-center justify-center w-14 h-14 rounded-full bg-rose-500 hover:bg-rose-600 transition-colors shadow-lg">
+                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path>
+                    </svg>
+                </span>
+            </button>
+        </div>
+
+        <!-- Chat Widget -->
+        <div class="fixed bottom-24 right-6 z-50">
+            <button id="chat-toggle" class="w-14 h-14 rounded-full bg-teal-500 hover:bg-teal-600 shadow-lg flex items-center justify-center transition-transform hover:scale-110">
+                <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path>
+                </svg>
+            </button>
+        </div>
+
+        <div id="chat-window" class="fixed bottom-24 right-6 w-[350px] md:w-[400px] h-[500px] glass-card z-50 flex flex-col hidden opacity-0 translate-y-10 transition-all duration-300 overflow-hidden">
+            <div class="p-4 border-b border-slate-700 flex justify-between items-center bg-teal-500/10">
+                <div class="flex items-center gap-2">
+                    <div class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
+                    <span class="font-display font-semibold">MindScreen Helper (AI)</span>
+                </div>
+                <button id="chat-close" class="text-slate-400 hover:text-white">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-width="2"></path></svg>
+                </button>
+            </div>
+            
+            <div id="chat-messages" class="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-900/50">
+                <div class="flex justify-start">
+                    <div class="bg-slate-800 text-slate-200 p-3 rounded-2xl rounded-tl-none max-w-[85%] text-sm border border-slate-700">
+                        สวัสดีครับ ผมเป็น AI ผู้ช่วยเบื้องต้น มีเรื่องไม่สบายใจอะไรอยากระบายหรือปรึกษาไหมครับ?
+                        <br><br>
+                        <span class="text-amber-400 text-xs">หมายเหตุ: ผมเป็น AI ไม่ใช่แพทย์ หากมีอาการรุนแรงกรุณาติดต่อสายด่วน 1323</span>
+                    </div>
+                </div>
+            </div>
+
+            <form id="chat-form" class="p-4 border-t border-slate-700 bg-slate-900/80">
+                <div class="flex gap-2">
+                    <input type="text" id="chat-input" placeholder="พิมพ์ข้อความ..." class="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-teal-500 text-white">
+                    <button type="submit" id="chat-submit" class="bg-teal-500 p-2 rounded-xl hover:bg-teal-600 transition-colors">
+                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Emergency Modal -->
+    <div class="modal-overlay" id="emergency-modal">
+        <div class="modal-content glass-card p-6 max-w-md mx-4">
+            <h3 class="font-display text-xl font-semibold mb-4 text-rose-400">สายด่วนช่วยเหลือ</h3>
+            <div class="space-y-3">
+                <a href="tel:1323" class="flex items-center gap-4 p-4 rounded-xl bg-slate-800/50 hover:bg-slate-800 transition-colors">
+                    <div class="w-12 h-12 rounded-full bg-teal-500/20 flex items-center justify-center">
+                        <svg class="w-6 h-6 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="font-semibold">สายด่วนสุขภาพจิต</div>
+                        <div class="text-2xl font-bold text-teal-400">1323</div>
+                    </div>
+                </a>
+                <a href="tel:1300" class="flex items-center gap-4 p-4 rounded-xl bg-slate-800/50 hover:bg-slate-800 transition-colors">
+                    <div class="w-12 h-12 rounded-full bg-amber-500/20 flex items-center justify-center">
+                        <svg class="w-6 h-6 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="font-semibold">ศูนย์ช่วยเหลือสังคม</div>
+                        <div class="text-2xl font-bold text-amber-400">1300</div>
+                    </div>
+                </a>
+            </div>
+            <button class="btn-secondary w-full mt-4" id="close-emergency">ปิด</button>
+        </div>
+    </div>
+
+    <!-- Feedback Modal -->
+    <div class="modal-overlay" id="feedback-modal">
+        <div class="modal-content glass-card p-6 max-w-md mx-4">
+            <h3 class="font-display text-xl font-semibold mb-4">รายงานความไม่ถูกต้อง</h3>
+            <p class="text-slate-400 text-sm mb-4">หากคุณเห็นว่าผลการประเมินไม่ตรงกับสภาพจริง โปรดแจ้งให้เราทราบ</p>
+            <textarea id="feedback-text" class="w-full p-4 rounded-xl bg-slate-800/50 border border-slate-700 focus:border-teal-500 focus:outline-none resize-none h-32" placeholder="อธิบายปัญหาที่พบ..."></textarea>
+            <div class="flex gap-3 mt-4">
+                <button class="btn-secondary flex-1" id="cancel-feedback">ยกเลิก</button>
+                <button class="btn-primary flex-1" id="submit-feedback">ส่งรายงาน</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // CONFIGURATION - ใส่ API Key ของคุณที่นี่
+        // ==========================================
+        const GROQ_API_KEY = "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";  // <-- ใส่ API Key ของคุณที่นี่
+        const SUPABASE_URL = "https://gykhozyaquarvnfzzvzn.supabase.co";
+        const SUPABASE_KEY = "sb_publishable_nJtWeS9bwLbJPadk7ckzvg_D6imIHEW";
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        // ==========================================
+        // CONSTANTS & DATA
+        // ==========================================
+        const STORAGE_KEYS = {
+            HISTORY: 'mindscreen_history',
+            FEEDBACKS: 'mindscreen_feedbacks'
+        };
+
+        const questions = [
+            { id: 1, text: "ในช่วง 2 สัปดาห์ที่ผ่านมา คุณรู้สึกไม่สนใจหรือไม่สนุกกับการทำสิ่งต่างๆ บ่อยแค่ไหน?", options: [{ value: 0, text: "ไม่เลย" }, { value: 1, text: "เป็นบางวัน (1-7 วัน)" }, { value: 2, text: "เป็นบ่อย (มากกว่า 7 วัน)" }, { value: 3, text: "เกือบทุกวัน" }] },
+            { id: 2, text: "รู้สึกหดหู่ ซึมเศร้า หรือท้อแท้หมดหวัง", options: [{ value: 0, text: "ไม่เลย" }, { value: 1, text: "เป็นบางวัน" }, { value: 2, text: "เป็นบ่อย" }, { value: 3, text: "เกือบทุกวัน" }] },
+            { id: 3, text: "มีปัญหาการนอนหลับ หรือนอนมากเกินไป", options: [{ value: 0, text: "ไม่เลย" }, { value: 1, text: "เป็นบางวัน" }, { value: 2, text: "เป็นบ่อย" }, { value: 3, text: "เกือบทุกวัน" }] },
+            { id: 4, text: "รู้สึกเหนื่อยล้าหรือขาดพลังงาน", options: [{ value: 0, text: "ไม่เลย" }, { value: 1, text: "เป็นบางวัน" }, { value: 2, text: "เป็นบ่อย" }, { value: 3, text: "เกือบทุกวัน" }] },
+            { id: 5, text: "รู้สึกไม่อยากกินอาหาร หรือกินมากเกินไป", options: [{ value: 0, text: "ไม่เลย" }, { value: 1, text: "เป็นบางวัน" }, { value: 2, text: "เป็นบ่อย" }, { value: 3, text: "เกือบทุกวัน" }] },
+            { id: 6, text: "รู้สึกไม่พอใจในตัวเอง หรือรู้สึกว่าตัวเองล้มเหลว", options: [{ value: 0, text: "ไม่เลย" }, { value: 1, text: "เป็นบางวัน" }, { value: 2, text: "เป็นบ่อย" }, { value: 3, text: "เกือบทุกวัน" }] },
+            { id: 7, text: "มีปัญหาเรื่องการมีสมาธิ อ่านหนังสือหรือดูโทรทัศน์", options: [{ value: 0, text: "ไม่เลย" }, { value: 1, text: "เป็นบางวัน" }, { value: 2, text: "เป็นบ่อย" }, { value: 3, text: "เกือบทุกวัน" }] },
+            { id: 8, text: "เคลื่อนไหวหรือพูดช้าลงจนคนอื่นสังเกตเห็น หรือกระสับกระส่าย", options: [{ value: 0, text: "ไม่เลย" }, { value: 1, text: "เป็นบางวัน" }, { value: 2, text: "เป็นบ่อย" }, { value: 3, text: "เกือบทุกวัน" }] },
+            { id: 9, text: "คิดว่าตัวเองจะดีกว่าถ้าตายไป หรือคิดทำร้ายตัวเอง", options: [{ value: 0, text: "ไม่เลย" }, { value: 1, text: "เป็นบางวัน" }, { value: 2, text: "เป็นบ่อย" }, { value: 3, text: "เกือบทุกวัน" }] }
+        ];
+
+        // ==========================================
+        // STATE
+        // ==========================================
+        let currentQuestion = 0;
+        let answers = new Array(questions.length).fill(null);
+        let currentResult = null;
+
+        // ==========================================
+        // DATABASE
+        // ==========================================
+        // ==========================================
+        // DATABASE (Supabase Version)
+        // ==========================================
+        const DB = {
+            getHistory: async function() {
+                try {
+                    const { data, error } = await supabaseClient // <--- แก้ตรงนี้
+                        .from('assessment_history')
+                        .select('*')
+                        .order('created_at', { ascending: false });
+                    
+                    if (error) throw error;
+                    return data || [];
+                } catch (e) { 
+                    console.error('Error fetching history:', e); 
+                    return []; 
+                }
+            },
+            saveResult: async function(result) {
+                try {
+                    const { error } = await supabaseClient // <--- แก้ตรงนี้
+                    .from('assessment_history')
+                    .insert([{
+                            total_score: result.totalScore,
+                            max_score: result.maxScore,
+                            risk_level: result.riskLevel,
+                            risk_label: result.riskLabel,
+                            confidence: result.confidence,
+                            has_self_harm_thoughts: result.hasSelfHarmThoughts,
+                            answers: result.answers,
+                            created_at: result.timestamp 
+                        }]);
+                    
+                    if (error) throw error;
+                } catch (e) { 
+                    console.error('Error saving result:', e); 
+                }
+            },
+            saveFeedback: function(feedback) {
+                // ฟังก์ชันนี้ยังเก็บลง LocalStorage เหมือนเดิม
+                try {
+                    const feedbacks = JSON.parse(localStorage.getItem(STORAGE_KEYS.FEEDBACKS) || '[]');
+                    feedbacks.push(feedback);
+                    localStorage.setItem(STORAGE_KEYS.FEEDBACKS, JSON.stringify(feedbacks));
+                } catch (e) { console.error('Error saving feedback:', e); }
+            },
+            // เปลี่ยน getStats ให้เป็น async เพื่อรอรับข้อมูลจาก getHistory
+            getStats: async function() {
+                const history = await this.getHistory();
+                const total = history.length;
+                if (total === 0) return { total: 0, low: 0, moderate: 0, high: 0 };
+                
+                // รองรับชื่อคอลัมน์จาก Supabase (risk_level)
+                const low = history.filter(h => (h.risk_level || h.riskLevel) === 'low').length;
+                const moderate = history.filter(h => (h.risk_level || h.riskLevel) === 'moderate').length;
+                const high = history.filter(h => (h.risk_level || h.riskLevel) === 'high').length;
+                
+                return { 
+                    total, 
+                    low: Math.round((low / total) * 100), 
+                    moderate: Math.round((moderate / total) * 100), 
+                    high: Math.round((high / total) * 100) 
+                };
+            }
+        };
+
+
+        // ==========================================
+        // AI ANALYSIS
+        // ==========================================
+        function analyzeRisk(ans) {
+            const totalScore = ans.reduce((sum, a) => sum + (a || 0), 0);
+            let riskLevel, riskLabel, recommendations, confidence;
+            const hasSelfHarmThoughts = ans[8] > 0;
+            
+            if (hasSelfHarmThoughts) {
+                riskLevel = 'high'; riskLabel = 'ความเสี่ยงสูง'; confidence = 0.95;
+                recommendations = ['แนะนำให้พบจิตแพทย์โดยเร็วที่สุด', 'โทรสายด่วน 1323 หากต้องการคุยกับผู้เชี่ยวชาญ', 'อย่าอยู่คนเดียว พยายามพูดคุยกับคนที่ไว้ใจ', 'หลีกเลี่ยงการตัดสินใจสำคัญในช่วงนี้'];
+            } else if (totalScore <= 4) {
+                riskLevel = 'low'; riskLabel = 'ความเสี่ยงต่ำ'; confidence = 0.85;
+                recommendations = ['ดูแลสุขภาพจิตด้วยการออกกำลังกายสม่ำเสมอ', 'นอนหลับให้เพียงพอ (7-8 ชั่วโมง)', 'ทำกิจกรรมที่ชอบและพักผ่อนหย่อนใจ', 'พูดคุยกับเพื่อนหรือคนใกล้ชิดเมื่อรู้สึกไม่สบายใจ'];
+            } else if (totalScore <= 9) {
+                riskLevel = 'moderate'; riskLabel = 'ความเสี่ยงปานกลาง'; confidence = 0.78;
+                recommendations = ['ควรปรึกษาจิตแพทย์หรือนักจิตวิทยา', 'ฝึกสมาธิหรือการหายใจลึกๆ', 'จัดตารางเวลาทำงานและพักผ่อนให้ชัดเจน', 'ลดปัจจัยเสี่ยง เช่น คาเฟอีน หรือความเครียด'];
+            } else if (totalScore <= 14) {
+                riskLevel = 'moderate'; riskLabel = 'ความเสี่ยงปานกลางถึงสูง'; confidence = 0.82;
+                recommendations = ['แนะนำให้พบจิตแพทย์เพื่อประเมินเพิ่มเติม', 'อาจต้องพิจารณาการรักษาด้วยยาหรือจิตบำบัด', 'หลีกเลี่ยงการดื่มแอลกอฮอล์หรือสารเสพติด', 'ขอรับการสนับสนุนจากครอบครัวและเพื่อน'];
+            } else {
+                riskLevel = 'high'; riskLabel = 'ความเสี่ยงสูง'; confidence = 0.90;
+                recommendations = ['ควรพบจิตแพทย์โดยเร็วที่สุด', 'อาจต้องเริ่มการรักษาด้วยยาและจิตบำบัด', 'หลีกเลี่ยงการอยู่คนเดียวเป็นเวลานาน', 'วางแผนฉุกเฉินสำหรับเวลาวิกฤต'];
+            }
+
+            const answeredCount = ans.filter(a => a !== null).length;
+            confidence = confidence * (answeredCount / questions.length);
+
+            return { totalScore, maxScore: questions.length * 3, riskLevel, riskLabel, confidence: Math.round(confidence * 100), recommendations, hasSelfHarmThoughts, timestamp: new Date().toISOString() };
+        }
+
+        // ==========================================
+        // UI HELPERS
+        // ==========================================
+        function showPage(pageName) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.nav-link').forEach(link => {
+                link.classList.remove('active');
+                if (link.dataset.page === pageName) link.classList.add('active');
+            });
+            const targetPage = document.getElementById('page-' + pageName);
+            if (targetPage) targetPage.classList.add('active');
+            if (pageName === 'history') renderHistory();
+            else if (pageName === 'landing') { updateKPIDashboard(); animateStaggerItems(); }
+        }
+
+        function animateStaggerItems() {
+            document.querySelectorAll('.stagger-item').forEach((item, index) => {
+                item.classList.remove('visible');
+                setTimeout(() => item.classList.add('visible'), index * 100);
+            });
+        }
+
+        async function updateKPIDashboard() {
+            // ใส่ await เพื่อรอข้อมูลจากฐานข้อมูล
+            const stats = await DB.getStats(); 
+            
+            const totalEl = document.getElementById('kpi-total');
+            const lowEl = document.getElementById('kpi-low');
+            const moderateEl = document.getElementById('kpi-moderate');
+            const highEl = document.getElementById('kpi-high');
+            
+            if (totalEl) totalEl.textContent = stats.total;
+            if (lowEl) lowEl.textContent = stats.low + '%';
+            if (moderateEl) moderateEl.textContent = stats.moderate + '%';
+            if (highEl) highEl.textContent = stats.high + '%';
+        }
+
+        // ==========================================
+        // ASSESSMENT FLOW
+        // ==========================================
+        function startAssessment() {
+            currentQuestion = 0;
+            answers = new Array(questions.length).fill(null);
+            showPage('assessment');
+            renderQuestion();
+        }
+
+        function renderQuestion() {
+            const q = questions[currentQuestion];
+            const container = document.getElementById('question-container');
+            if (!container) return;
+            
+            const currentQEl = document.getElementById('current-q');
+            const totalQEl = document.getElementById('total-q');
+            const progressBar = document.getElementById('progress-bar');
+            if (currentQEl) currentQEl.textContent = currentQuestion + 1;
+            if (totalQEl) totalQEl.textContent = questions.length;
+            if (progressBar) progressBar.style.width = ((currentQuestion) / questions.length) * 100 + '%';
+
+            let html = '<h3 class="font-display text-xl md:text-2xl font-semibold mb-6">' + q.text + '</h3><div class="space-y-3" id="options-container">';
+            q.options.forEach(function(opt) {
+                const isSelected = answers[currentQuestion] === opt.value;
+                html += '<div class="option-card ' + (isSelected ? 'selected' : '') + '" data-value="' + opt.value + '" tabindex="0" role="radio" aria-checked="' + isSelected + '">' +
+                    '<div class="flex items-center gap-4">' +
+                    '<div class="w-5 h-5 rounded-full border-2 ' + (isSelected ? 'border-teal-500 bg-teal-500' : 'border-slate-500') + ' flex items-center justify-center">' +
+                    (isSelected ? '<div class="w-2 h-2 rounded-full bg-white"></div>' : '') + '</div>' +
+                    '<span class="' + (isSelected ? 'text-teal-400' : 'text-slate-300') + '">' + opt.text + '</span></div></div>';
+            });
+            html += '</div>';
+            container.innerHTML = html;
+
+            const btnPrev = document.getElementById('btn-prev');
+            const btnNext = document.getElementById('btn-next');
+            if (btnPrev) btnPrev.disabled = currentQuestion === 0;
+            if (btnNext) btnNext.textContent = currentQuestion === questions.length - 1 ? 'ดูผลลัพธ์' : 'ข้อถัดไป';
+
+            container.querySelectorAll('.option-card').forEach(function(card) {
+                card.addEventListener('click', function() { selectOption(parseInt(card.dataset.value)); });
+                card.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectOption(parseInt(card.dataset.value)); }
+                });
+            });
+        }
+
+        function selectOption(value) { answers[currentQuestion] = value; renderQuestion(); }
+
+        function nextQuestion() {
+            if (answers[currentQuestion] === null) { alert('กรุณาเลือกคำตอบ'); return; }
+            if (currentQuestion < questions.length - 1) { currentQuestion++; renderQuestion(); }
+            else showResult();
+        }
+
+        function prevQuestion() { if (currentQuestion > 0) { currentQuestion--; renderQuestion(); } }
+
+        // ==========================================
+        // RESULT
+        // ==========================================
+        function showResult() {
+            showPage('result');
+            const container = document.getElementById('result-container');
+            if (!container) return;
+            container.innerHTML = '<div class="flex flex-col items-center justify-center py-12"><div class="spinner mb-4"></div><p class="text-slate-400">กำลังวิเคราะห์ผลลัพธ์...</p></div>';
+
+            // เปลี่ยนตรงนี้เป็น async function
+            setTimeout(async function() {
+                const result = analyzeRisk(answers);
+                currentResult = result;
+                
+                // เติม await เพื่อรอให้บันทึกลงฐานข้อมูลสำเร็จก่อน
+                await DB.saveResult({ 
+                    totalScore: result.totalScore, 
+                    maxScore: result.maxScore, 
+                    riskLevel: result.riskLevel, 
+                    riskLabel: result.riskLabel, 
+                    confidence: result.confidence, 
+                    hasSelfHarmThoughts: result.hasSelfHarmThoughts, 
+                    timestamp: result.timestamp, 
+                    id: Date.now(), 
+                    answers: answers.slice() 
+                });
+                
+                // ค่อยแสดงผลลัพธ์ (และปุ่มให้กดยืนยัน)
+                renderResult(result);
+            }, 1500);
+        }
+
+        function renderResult(result) {
+            const container = document.getElementById('result-container');
+            if (!container) return;
+            const riskClass = result.riskLevel === 'low' ? 'risk-low' : result.riskLevel === 'moderate' ? 'risk-moderate' : 'risk-high';
+            const riskBgClass = result.riskLevel === 'low' ? 'risk-bg-low' : result.riskLevel === 'moderate' ? 'risk-bg-moderate' : 'risk-bg-high';
+
+            let html = '<div class="text-center mb-8"><h2 class="font-display text-2xl font-semibold mb-2">ผลการประเมิน</h2>' +
+                '<p class="text-slate-400">วันที่ ' + new Date(result.timestamp).toLocaleDateString('th-TH') + '</p></div>' +
+                '<div class="text-center mb-8 p-6 rounded-2xl border ' + riskBgClass + '">' +
+                '<div class="text-5xl font-bold ' + riskClass + ' mb-2">' + result.totalScore + '</div>' +
+                '<div class="text-slate-400 text-sm mb-2">จากคะแนนเต็ม ' + result.maxScore + '</div>' +
+                '<div class="text-2xl font-display font-semibold ' + riskClass + '">' + result.riskLabel + '</div></div>' +
+                '<div class="mb-8"><div class="flex justify-between items-center mb-2">' +
+                '<span class="text-sm text-slate-400">ความมั่นใจของ AI</span><span class="text-sm font-medium">' + result.confidence + '%</span></div>' +
+                '<div class="confidence-bar"><div class="confidence-fill bg-gradient-to-r from-teal-500 to-cyan-500" style="width: ' + result.confidence + '%"></div></div>' +
+                (result.confidence < 80 ? '<p class="text-amber-400 text-xs mt-2">ความมั่นใจต่ำ: แนะนำให้ประเมินซ้ำหรือปรึกษาผู้เชี่ยวชาญ</p>' : '') + '</div>' +
+                '<div class="mb-8"><h3 class="font-display font-semibold mb-4">คำแนะนำจาก AI</h3><div class="space-y-3">';
+
+            result.recommendations.forEach(function(rec, i) {
+                html += '<div class="flex items-start gap-3 p-3 rounded-xl bg-slate-800/50">' +
+                    '<div class="w-6 h-6 rounded-full bg-teal-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">' +
+                    '<span class="text-teal-400 text-sm font-medium">' + (i + 1) + '</span></div>' +
+                    '<span class="text-slate-300">' + rec + '</span></div>';
+            });
+
+            html += '</div></div><div class="p-4 rounded-xl border border-amber-500/30 bg-amber-500/5 mb-8">' +
+                '<div class="flex gap-3"><svg class="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">' +
+                '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>' +
+                '<div><p class="text-amber-400 font-medium text-sm mb-1">ข้อจำกัดของระบบ (Guardrail)</p>' +
+                '<p class="text-slate-400 text-sm">ผลการประเมินนี้เป็นเพียงการคัดกรองเบื้องต้น ไม่สามารถแทนการวินิจฉัยของแพทย์หรือจิตแพทย์ได้ หากมีข้อสงสัย ควรปรึกษาผู้เชี่ยวชาญ</p></div></div></div>' +
+                '<div class="p-4 rounded-xl border border-slate-700 bg-slate-800/30 mb-8">' +
+                '<h4 class="font-medium mb-3 flex items-center gap-2"><svg class="w-5 h-5 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">' +
+                '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>Human-in-the-Loop: ยืนยันผล</h4>' +
+                '<p class="text-slate-400 text-sm mb-4">คุณเห็นด้วยกับผลการประเมินนี้หรือไม่?</p>' +
+                '<div class="flex gap-3"><button class="btn-primary flex-1" id="confirm-yes">เห็นด้วย</button>' +
+                '<button class="btn-secondary flex-1" id="confirm-no">ไม่เห็นด้วย</button></div></div>';
+
+            if (result.riskLevel === 'high' || result.hasSelfHarmThoughts) {
+                html += '<div class="p-4 rounded-xl border border-rose-500/30 bg-rose-500/10 mb-8">' +
+                    '<h4 class="font-medium mb-2 text-rose-400">ต้องการความช่วยเหลือเร่งด่วน?</h4>' +
+                    '<p class="text-slate-400 text-sm mb-3">หากคุณรู้สึกไม่ปลอดภัย โปรดติดต่อสายด่วนทันที</p>' +
+                    '<a href="tel:1323" class="btn-primary inline-flex items-center gap-2 bg-rose-500 hover:bg-rose-600">' +
+                    '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">' +
+                    '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path>' +
+                    '</svg>โทร 1323</a></div>';
+            }
+
+            html += '<div class="flex flex-wrap gap-3">' +
+                '<button class="btn-secondary" id="report-feedback"><svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">' +
+                '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>' +
+                '</svg>รายงานความไม่ถูกต้อง</button>' +
+                '<button class="btn-secondary" id="restart-assessment">ประเมินอีกครั้ง</button>' +
+                '<button class="btn-secondary" id="view-history-result">ดูประวัติ</button></div>';
+
+            container.innerHTML = html;
+
+            const confirmYesBtn = document.getElementById('confirm-yes');
+            const confirmNoBtn = document.getElementById('confirm-no');
+            const reportFeedbackBtn = document.getElementById('report-feedback');
+            const restartBtn = document.getElementById('restart-assessment');
+            const historyBtn = document.getElementById('view-history-result');
+            if (confirmYesBtn) confirmYesBtn.addEventListener('click', function() { confirmResult(true); });
+            if (confirmNoBtn) confirmNoBtn.addEventListener('click', function() { confirmResult(false); });
+            if (reportFeedbackBtn) reportFeedbackBtn.addEventListener('click', showFeedbackModal);
+            if (restartBtn) restartBtn.addEventListener('click', startAssessment);
+            if (historyBtn) historyBtn.addEventListener('click', function() { showPage('history'); });
+            updateKPIDashboard();
+        }
+
+        async function confirmResult(agreed) {
+            if (!currentResult) return;
+
+            // ปิดปุ่มชั่วคราวระหว่างรออัปเดตข้อมูล เพื่อป้องกันผู้ใช้กดรัวๆ
+            const confirmYesBtn = document.getElementById('confirm-yes');
+            const confirmNoBtn = document.getElementById('confirm-no');
+            if (confirmYesBtn) confirmYesBtn.disabled = true;
+            if (confirmNoBtn) confirmNoBtn.disabled = true;
+
+            try {
+                // สั่งอัปเดตข้อมูลใน Supabase 
+                // เช็คจากคอลัมน์ created_at ให้ตรงกับเวลาของรอบการประเมินปัจจุบัน
+                const { error } = await supabaseClient // <--- แก้ตรงนี้
+                .from('assessment_history')
+                .update({ user_confirmed: agreed })
+                .eq('created_at', currentResult.timestamp);
+
+                if (error) throw error;
+
+                if (agreed) {
+                    alert('ขอบคุณสำหรับการยืนยัน ผลการประเมินถูกบันทึกเรียบร้อยแล้ว');
+                } else {
+                    showFeedbackModal();
+                }
+            } catch (e) {
+                console.error('Error updating confirmation:', e);
+                alert('เกิดข้อผิดพลาดในการบันทึกข้อมูลเข้าฐานข้อมูล กรุณาลองใหม่อีกครั้ง');
+                
+                // หากเกิด Error ให้เปิดปุ่มให้กดใหม่ได้
+                if (confirmYesBtn) confirmYesBtn.disabled = false;
+                if (confirmNoBtn) confirmNoBtn.disabled = false;
+            }
+        }
+
+        // ==========================================
+        // HISTORY
+        // ==========================================
+      async function renderHistory() {
+            const container = document.getElementById('history-container');
+            if (!container) return;
+            
+            // แสดงสถานะ Loading ระหว่างรอข้อมูลจาก Supabase
+            container.innerHTML = '<div class="p-12 text-center"><div class="spinner mx-auto mb-4"></div><p class="text-slate-400">กำลังโหลดข้อมูลประวัติ...</p></div>';
+
+            // ดึงข้อมูลจากฐานข้อมูล
+            const history = await DB.getHistory();
+
+            if (!history || history.length === 0) {
+                container.innerHTML = '<div class="p-12 text-center"><svg class="w-16 h-16 mx-auto text-slate-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">' +
+                    '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>' +
+                    '<p class="text-slate-400">ยังไม่มีประวัติการประเมิน</p><button class="btn-primary mt-4" id="start-from-history">เริ่มการประเมิน</button></div>';
+                const startBtn = document.getElementById('start-from-history');
+                if (startBtn) startBtn.addEventListener('click', startAssessment);
+                return;
+            }
+
+            let html = '<div class="overflow-x-auto"><table class="w-full"><thead><tr class="border-b border-slate-700">' +
+                '<th class="text-left p-4 text-slate-400 font-medium whitespace-nowrap">วันที่</th>' +
+                '<th class="text-center p-4 text-slate-400 font-medium whitespace-nowrap">คะแนน</th>' +
+                '<th class="text-center p-4 text-slate-400 font-medium whitespace-nowrap">ระดับความเสี่ยง</th>' +
+                '<th class="text-center p-4 text-slate-400 font-medium whitespace-nowrap">ความมั่นใจ AI</th>' +
+                '<th class="text-center p-4 text-slate-400 font-medium whitespace-nowrap">ยืนยันโดยผู้ใช้</th></tr></thead><tbody>';
+
+            history.forEach(function(h) {
+                // ดึงค่าโดยรองรับทั้งชื่อฟิลด์แบบ Supabase (snake_case) และ LocalStorage (camelCase)
+                const riskLevel = h.risk_level || h.riskLevel;
+                const riskLabel = h.risk_label || h.riskLabel;
+                const totalScore = h.total_score !== undefined ? h.total_score : h.totalScore;
+                const maxScore = h.max_score !== undefined ? h.max_score : h.maxScore;
+                const userConfirmed = h.user_confirmed !== undefined ? h.user_confirmed : h.userConfirmed;
+                const timestamp = h.created_at || h.timestamp;
+
+                const riskClass = riskLevel === 'low' ? 'risk-low' : riskLevel === 'moderate' ? 'risk-moderate' : 'risk-high';
+                const riskBgClass = riskLevel === 'low' ? 'risk-bg-low' : riskLevel === 'moderate' ? 'risk-bg-moderate' : 'risk-bg-high';
+                
+                // เพิ่มเวลา (ชั่วโมง:นาที) เข้าไปด้วย เพื่อให้แยกออกกรณีทำหลายครั้งในวันเดียวกัน
+                const formattedDate = new Date(timestamp).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+                html += '<tr class="history-row border-b border-slate-800">' +
+                    '<td class="p-4 whitespace-nowrap">' + formattedDate + '</td>' +
+                    '<td class="p-4 text-center font-medium">' + totalScore + '/' + maxScore + '</td>' +
+                    '<td class="p-4 text-center"><span class="px-3 py-1 rounded-full text-sm whitespace-nowrap ' + riskBgClass + ' ' + riskClass + '">' + riskLabel + '</span></td>' +
+                    '<td class="p-4 text-center">' + h.confidence + '%</td>' +
+                    '<td class="p-4 text-center">' + (userConfirmed === null || userConfirmed === undefined ? '-' : userConfirmed ? '<span class="text-teal-400">เห็นด้วย</span>' : '<span class="text-amber-400">ไม่เห็นด้วย</span>') + '</td></tr>';
+            });
+            html += '</tbody></table></div>';
+            container.innerHTML = html;
+        }
+
+        // ==========================================
+        // MODALS
+        // ==========================================
+        function showEmergencyModal() { const modal = document.getElementById('emergency-modal'); if (modal) modal.classList.add('active'); }
+        function closeEmergencyModal() { const modal = document.getElementById('emergency-modal'); if (modal) modal.classList.remove('active'); }
+        function showFeedbackModal() { const modal = document.getElementById('feedback-modal'); if (modal) modal.classList.add('active'); }
+        function closeFeedbackModal() { const modal = document.getElementById('feedback-modal'); const textArea = document.getElementById('feedback-text'); if (modal) modal.classList.remove('active'); if (textArea) textArea.value = ''; }
+
+        function submitFeedback() {
+            const textArea = document.getElementById('feedback-text');
+            const text = textArea ? textArea.value.trim() : '';
+            if (!text) { alert('กรุณากรอกข้อมูล'); return; }
+            DB.saveFeedback({ text: text, resultId: currentResult ? currentResult.timestamp : null, timestamp: new Date().toISOString() });
+            alert('ขอบคุณสำหรับการรายงาน เราจะนำไปปรับปรุงระบบต่อไป');
+            closeFeedbackModal();
+        }
+
+        // ==========================================
+        // CHAT FUNCTIONS
+        // ==========================================
+        function toggleChat() {
+            const chatWindow = document.getElementById('chat-window');
+            if (!chatWindow) return;
+            if (chatWindow.classList.contains('hidden')) {
+                chatWindow.classList.remove('hidden');
+                setTimeout(function() { chatWindow.classList.remove('opacity-0', 'translate-y-10'); chatWindow.classList.add('opacity-100', 'translate-y-0'); }, 10);
+            } else {
+                chatWindow.classList.add('opacity-0', 'translate-y-10');
+                chatWindow.classList.remove('opacity-100', 'translate-y-0');
+                setTimeout(function() { chatWindow.classList.add('hidden'); }, 300);
+            }
+        }
+
+        function appendChatMessage(sender, text) {
+            const messagesContainer = document.getElementById('chat-messages');
+            if (!messagesContainer) return;
+            const div = document.createElement('div');
+            div.className = 'flex ' + (sender === 'user' ? 'justify-end' : 'justify-start') + ' stagger-item visible';
+            const innerDiv = document.createElement('div');
+            innerDiv.className = sender === 'user' ? 'bg-teal-500 text-white p-3 rounded-2xl rounded-tr-none max-w-[85%] text-sm shadow-md' : 'bg-slate-800 text-slate-200 p-3 rounded-2xl rounded-tl-none max-w-[85%] text-sm border border-slate-700';
+            innerDiv.innerText = text;
+            div.appendChild(innerDiv);
+            messagesContainer.appendChild(div);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        function showTypingIndicator() {
+            const messagesContainer = document.getElementById('chat-messages');
+            if (!messagesContainer) return;
+            const div = document.createElement('div');
+            div.className = 'flex justify-start';
+            div.id = 'typing-container';
+            div.innerHTML = '<div class="bg-slate-800 text-slate-200 p-3 rounded-2xl rounded-tl-none border border-slate-700"><div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div></div>';
+            messagesContainer.appendChild(div);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        function removeTypingIndicator() { const typingContainer = document.getElementById('typing-container'); if (typingContainer) typingContainer.remove(); }
+
+        async function handleChatSubmit(e) {
+            e.preventDefault();
+            const input = document.getElementById('chat-input');
+            const message = input ? input.value.trim() : '';
+            if (!message) return;
+            
+            // ตรวจสอบ API Key
+            if (!GROQ_API_KEY || GROQ_API_KEY === "YOUR_GROQ_API_KEY_HERE") {
+                appendChatMessage('bot', 'กรุณาใส่ Groq API Key ในตัวแปร GROQ_API_KEY ที่ส่วนบนของไฟล์ JavaScript ก่อนใช้งานระบบแชท');
+                return;
+            }
+
+            appendChatMessage('user', message);
+            if (input) input.value = '';
+            showTypingIndicator();
+
+            try {
+                const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + GROQ_API_KEY, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        model: 'llama-3.3-70b-versatile',
+                        messages: [
+                            { role: 'system', content: 'คุณคือ MindScreen AI Helper ผู้ช่วยให้คำปรึกษาสุขภาพจิตเบื้องต้น ตอบด้วยภาษาไทยที่สุภาพ อบอุ่น และให้กำลังใจ หากผู้ใช้มีอาการรุนแรงหรือพูดถึงการทำร้ายตัวเอง ให้แนะนำติดต่อสายด่วน 1323 ทันที และเน้นว่าคุณเป็น AI ไม่ใช่แพทย์ ไม่สามารถวินิจฉัยโรคได้' },
+                            { role: 'user', content: message }
+                        ],
+                        temperature: 0.7,
+                        max_tokens: 500
+                    })
+                });
+
+                removeTypingIndicator();
+                if (!response.ok) throw new Error('API Error: ' + response.status);
+                const data = await response.json();
+                const botReply = data.choices && data.choices[0] && data.choices[0].message ? data.choices[0].message.content : 'ขออภัย เกิดข้อผิดพลาดในการประมวลผล';
+                appendChatMessage('bot', botReply);
+            } catch (error) {
+                removeTypingIndicator();
+                appendChatMessage('bot', 'ขออภัยครับ เกิดข้อผิดพลาดในการเชื่อมต่อ API กรุณาตรวจสอบ API Key ของคุณ');
+                console.error('Chat error:', error);
+            }
+        }
+
+        // ==========================================
+        // INITIALIZATION
+        // ==========================================
+        document.addEventListener('DOMContentLoaded', function() {
+            updateKPIDashboard();
+            animateStaggerItems();
+
+            // Navigation
+            const navLanding = document.getElementById('nav-landing');
+            const navAssessment = document.getElementById('nav-assessment');
+            const navHistory = document.getElementById('nav-history');
+            if (navLanding) navLanding.addEventListener('click', function() { showPage('landing'); });
+            if (navAssessment) navAssessment.addEventListener('click', startAssessment);
+            if (navHistory) navHistory.addEventListener('click', function() { showPage('history'); });
+
+            // Landing buttons
+            const startBtn = document.getElementById('btn-start-assessment');
+            const historyBtn = document.getElementById('btn-view-history');
+            if (startBtn) startBtn.addEventListener('click', startAssessment);
+            if (historyBtn) historyBtn.addEventListener('click', function() { showPage('history'); });
+
+            // Assessment buttons
+            const prevBtn = document.getElementById('btn-prev');
+            const nextBtn = document.getElementById('btn-next');
+            if (prevBtn) prevBtn.addEventListener('click', prevQuestion);
+            if (nextBtn) nextBtn.addEventListener('click', nextQuestion);
+
+            // Emergency modal
+            const emergencyBtn = document.getElementById('emergency-btn');
+            const closeEmergencyBtn = document.getElementById('close-emergency');
+            if (emergencyBtn) emergencyBtn.addEventListener('click', showEmergencyModal);
+            if (closeEmergencyBtn) closeEmergencyBtn.addEventListener('click', closeEmergencyModal);
+
+            // Feedback modal
+            const cancelFeedbackBtn = document.getElementById('cancel-feedback');
+            const submitFeedbackBtn = document.getElementById('submit-feedback');
+            if (cancelFeedbackBtn) cancelFeedbackBtn.addEventListener('click', closeFeedbackModal);
+            if (submitFeedbackBtn) submitFeedbackBtn.addEventListener('click', submitFeedback);
+
+            // Chat
+            const chatToggle = document.getElementById('chat-toggle');
+            const chatClose = document.getElementById('chat-close');
+            const chatForm = document.getElementById('chat-form');
+            if (chatToggle) chatToggle.addEventListener('click', toggleChat);
+            if (chatClose) chatClose.addEventListener('click', toggleChat);
+            if (chatForm) chatForm.addEventListener('submit', handleChatSubmit);
+
+            // Close modals on overlay click
+            document.querySelectorAll('.modal-overlay').forEach(function(overlay) {
+                overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.classList.remove('active'); });
+            });
+
+            // Keyboard close for modals
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') document.querySelectorAll('.modal-overlay.active').forEach(function(modal) { modal.classList.remove('active'); });
+            });
+        });
+    </script>
+</body>
+</html>
